@@ -1,0 +1,121 @@
+{
+  "name": "autocity-accounting-pro-beta",
+  "version": "1.0.0",
+  "description": "Professional Accounting Software for Auto City",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win --x64",
+    "dist:win32": "electron-builder --win --ia32",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [
+    "accounting",
+    "inventory",
+    "pos",
+    "billing",
+    "tally"
+  ],
+  "author": "Auto City",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.6.0",
+    "body-parser": "^1.20.4",
+    "cors": "^2.8.5",
+    "express": "^4.22.1"
+  },
+  "build": {
+    "appId": "com.autocity.accounting",
+    "productName": "Auto City Accounting Pro",
+    "asar": true,
+    "asarUnpack": [
+      "backend/**/*",
+      "data/**/*"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "frontend/**/*",
+      "backend/**/*",
+      "data/**/*",
+      "!backend/*.db",
+      "!backend/*.db-shm",
+      "!backend/*.db-wal",
+      "!backend/tally.db*",
+      "!data/*.db",
+      "!dist/**/*"
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Auto City Accounting Pro",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    },
+    "mac": {
+      "target": {
+        "target": "dmg",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      },
+      "category": "public.app-category.business"
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "assets/icon.png",
+      "category": "Office",
+      "maintainer": "Auto City <support@autocity.com>"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    }
+  }
+}
