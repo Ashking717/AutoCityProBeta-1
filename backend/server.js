@@ -11,6 +11,76 @@ const app = express();
 app.use(bodyParser.json());
 app.use(cors());
 
+// ============================================
+// FILE LOGGING FOR WINDOWS EXE DEBUGGING
+// ============================================
+let logFilePath;
+try {
+  // Determine log file location
+  if (process.env.APPDATA) {
+    // Windows
+    logFilePath = path.join(process.env.APPDATA, 'AutoCityAccountingPro', 'server.log');
+  } else if (process.platform === 'darwin') {
+    // macOS
+    logFilePath = path.join(os.homedir(), 'Library', 'Application Support', 'AutoCityAccountingPro', 'server.log');
+  } else {
+    // Linux
+    logFilePath = path.join(os.homedir(), '.config', 'AutoCityAccountingPro', 'server.log');
+  }
+  
+  // Ensure directory exists
+  const logDir = path.dirname(logFilePath);
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+  
+  // Clear old log on startup
+  if (fs.existsSync(logFilePath)) {
+    fs.writeFileSync(logFilePath, ''); // Clear previous log
+  }
+  
+  // Override console.log and console.error
+  const originalLog = console.log;
+  const originalError = console.error;
+  
+  console.log = function(...args) {
+    const timestamp = new Date().toISOString();
+    const message = args.map(arg => 
+      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+    ).join(' ');
+    
+    try {
+      fs.appendFileSync(logFilePath, `[LOG ${timestamp}] ${message}\n`);
+    } catch (err) {
+      // Silently fail if logging fails
+    }
+    originalLog.apply(console, args);
+  };
+  
+  console.error = function(...args) {
+    const timestamp = new Date().toISOString();
+    const message = args.map(arg => 
+      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+    ).join(' ');
+    
+    try {
+      fs.appendFileSync(logFilePath, `[ERROR ${timestamp}] ${message}\n`);
+    } catch (err) {
+      // Silently fail if logging fails
+    }
+    originalError.apply(console, args);
+  };
+  
+  console.log('========================================');
+  console.log('AUTO CITY ACCOUNTING PRO - SERVER START');
+  console.log('========================================');
+  console.log('📝 Log file:', logFilePath);
+  console.log('🖥️  Platform:', process.platform);
+  console.log('📁 Working directory:', __dirname);
+} catch (err) {
+  console.error('Failed to setup logging:', err);
+}
+
 // Determine database path based on environment
 let dbPath;
 if (process.env.PORTABLE_EXECUTABLE_DIR) {
@@ -475,6 +545,8 @@ function initializeDefaultAdmin() {
     if (adminCount.count === 0) {
       console.log('👤 Creating default admin user...');
       const defaultPassword = hashPassword('admin123');
+      console.log('🔑 Password hash:', defaultPassword);
+      
       const result = db.prepare(`
         INSERT INTO users (username, password, full_name, role, permissions)
         VALUES (?, ?, ?, ?, ?)
@@ -485,8 +557,15 @@ function initializeDefaultAdmin() {
       console.log('   Password: admin123');
       console.log('   User ID:', result.lastInsertRowid);
       console.log('⚠️  Please change the password after first login!');
+      
+      // Verify it was created
+      const verify = db.prepare('SELECT username, role FROM users WHERE id = ?').get(result.lastInsertRowid);
+      console.log('✓ Verification:', verify);
     } else {
       console.log('✅ Admin user already exists');
+      // Show existing admin details
+      const admin = db.prepare('SELECT id, username, role, created_at FROM users WHERE role = ?').get('admin');
+      console.log('   Admin user:', admin);
     }
   } catch (err) {
     console.error('❌ Error initializing admin:', err);
@@ -494,7 +573,58 @@ function initializeDefaultAdmin() {
   }
 }
 
-initializeDefaultAdmin();
+// Check for first run and ensure admin exists
+function checkFirstRun() {
+  try {
+    const firstRunMarker = path.join(path.dirname(dbPath), '.initialized');
+    console.log('🔍 Checking first run marker:', firstRunMarker);
+    
+    if (!fs.existsSync(firstRunMarker)) {
+      console.log('🆕 FIRST RUN DETECTED - Ensuring clean admin setup...');
+      
+      // Delete any existing admin (in case of corrupted data)
+      try {
+        const deleted = db.prepare('DELETE FROM users WHERE username = ?').run('admin');
+        console.log('🗑️  Deleted existing admin entries:', deleted.changes);
+      } catch (err) {
+        console.log('ℹ️  No existing admin to delete:', err.message);
+      }
+      
+      // Create fresh admin
+      const defaultPassword = hashPassword('admin123');
+      const result = db.prepare(`
+        INSERT INTO users (username, password, full_name, role, permissions, is_active)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run('admin', defaultPassword, 'System Administrator', 'admin', JSON.stringify(['all']), 1);
+      
+      console.log('✅ Fresh admin created on first run!');
+      console.log('   ID:', result.lastInsertRowid);
+      console.log('   Username: admin');
+      console.log('   Password: admin123');
+      
+      // Mark as initialized
+      fs.writeFileSync(firstRunMarker, JSON.stringify({
+        initialized: new Date().toISOString(),
+        version: '1.0.0'
+      }));
+      console.log('✓ First run marker created');
+    } else {
+      console.log('✓ App previously initialized');
+      const markerData = fs.readFileSync(firstRunMarker, 'utf8');
+      console.log('   Marker data:', markerData);
+    }
+  } catch (err) {
+    console.error('❌ Error in checkFirstRun:', err);
+  }
+}
+
+// Initialize with delay to ensure tables are ready
+setTimeout(() => {
+  console.log('⏰ Running delayed initialization (1000ms)...');
+  initializeDefaultAdmin();
+  checkFirstRun();
+  console.log('✅ Initialization complete');
+}, 1000);
 
 // ============================================
 // ENHANCED: Authentication Endpoints
